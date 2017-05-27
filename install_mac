@@ -1,0 +1,21 @@
+#!/bin/bash
+# Installs gym on mac
+
+# Upgrade pip
+pip3 install --ignore-installed pip
+
+# Install Brew
+#ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" < /dev/null 2> /dev/null
+
+# Install requirements
+brew install cmake boost boost-python sdl2 swig wget
+brew install python3
+brew install boost-python --with-python3
+
+# Install
+#pip install -e '.[all]'
+pip install -e .
+
+# Test run
+python gym/envs/classic_control/cartpole.py
+
