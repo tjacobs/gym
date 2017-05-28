@@ -14,8 +14,9 @@ def run_episode(env, parameters):
     total_reward = 0
     for t in range(200):
 
-        # Show us what's going on. Remove this line to run super fast.
-        env.render()
+        # Show us what's going on. Remove this line to run super fast. 
+        # The monitor will still render some random ones though for video recording, even if render is off.
+#        env.render()
 
         # Pick action
         action = 0 if np.matmul(parameters, observation) < 0 else 1
@@ -32,15 +33,15 @@ def run_episode(env, parameters):
 
 def train(submit):
     env = gym.make('CartPole-v0')
-    if submit == True:
+    if submit:
         env = gym.wrappers.Monitor(env, 'cartpole', force=True)
 
-    # Run lots of episodes with random params, and find best_params
+    # Run lots of episodes with random params, and find the best_parameters
     results = []
     counter = 0
     best_parameters = None
     best_reward = 0
-    for t in range(1000):
+    for t in range(100):
 
         # Pick random parameters and run
         parameters = np.random.rand(4) * 2 - 1
@@ -52,13 +53,15 @@ def train(submit):
         if reward > best_reward:
             best_reward = reward
             best_parameters = parameters
+            print("Better parameters found.")
 
             # And did we win the world?
             if reward == 200:
-                print("Win!")
-                break
+                print("Win! Episode {}".format(t))
+                break # Can't do better than 200 reward, so quit trying
 
     # Run 100 runs with the best found params
+    print("Found best_parameters, running 100 more episodes with them.")
     for t in range(100):
         reward = run_episode(env, best_parameters)
         results.append(reward)
@@ -66,21 +69,23 @@ def train(submit):
 
     return results
 
-# Submit it or view it
+# Submit it?
 submit = True
+
+# Run
 results = train(submit=submit)
-if submit == True:
+if submit:
     # Submit to OpenAI Gym
     print("Uploading to gym")
-    gym.scoreboard.api_key = 'sk_SNXZj7aeSvKTAOTfHGVuCg'
-    print("Results" + str( gym.upload('cartpole')) )
+    gym.scoreboard.api_key = '' # Your key
+    gym.upload('cartpole')
 
 else:
     # Graph
-    plt.hist(results, 50, normed=1, facecolor='g', alpha=0.75)
+    plt.plot(results)
     plt.xlabel('')
-    plt.ylabel('Frequency')
-    plt.title('Histogram')
+    plt.ylabel('')
+    plt.title('Rewards over time')
     plt.show()
 
 
