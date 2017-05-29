@@ -4,7 +4,8 @@
 # 
 # Runs on Python 3.
 # Originally based on https://github.com/kvfrans/openai-cartpole
-# You can easily it to the OpenAI Gym scoreboard by entering your OpenAI API key and enabling submit below.
+# You can submit it to the OpenAI Gym scoreboard by entering your OpenAI API key and enabling submit below.
+# It will submit only if it is considered solved.
 
 import tensorflow as tf
 import numpy as np
@@ -33,17 +34,17 @@ def policy_gradient():
         good_probabilities = tf.reduce_sum(tf.multiply(probabilities, actions), reduction_indices=[1])
         eligibility = tf.log(good_probabilities) * advantages
         loss = -tf.reduce_sum(eligibility)
-        optimizer = tf.train.AdamOptimizer(0.01).minimize(loss) # Learning rate 0.01, aim to minimize loss
+        optimizer = tf.train.AdamOptimizer(0.1).minimize(loss) # Learning rate 0.01, aim to minimize loss
         return probabilities, state, actions, advantages, optimizer
 
 def value_gradient():
     with tf.variable_scope("value"):
         state = tf.placeholder("float", [None, 4])       # World state
         newvals = tf.placeholder("float", [None, 1])     
-        w1 = tf.get_variable("w1", [4, 10])              # Value gradient is *w1+b1, Relu, *w2+b2. 4, 10, 1.
-        b1 = tf.get_variable("b1", [10])
+        w1 = tf.get_variable("w1", [4, 2])              # Value gradient is *w1+b1, Relu, *w2+b2. 4, 10, 1.
+        b1 = tf.get_variable("b1", [2])
         h1 = tf.nn.relu(tf.matmul(state, w1) + b1)
-        w2 = tf.get_variable("w2", [10, 1])
+        w2 = tf.get_variable("w2", [2, 1])
         b2 = tf.get_variable("b2", [1])
         calculated = tf.matmul(h1,w2) + b2
         diffs = calculated - newvals                     # How different did we do from expected?
@@ -63,12 +64,14 @@ def run_episode(env, policy_grad, value_grad, sess, render=False):
     update_vals = []
 
     for t in range(200):
+        # Render
         if render:
             env.render()
+
         # Calculate policy
         obs_vector = np.expand_dims(observation, axis=0)
         probs = sess.run(pl_calculated,feed_dict={pl_state: obs_vector})
-        action = 0 if random.uniform(0,1) < probs[0][0] else 1
+        action = 0 if random.uniform(0, 1) < probs[0][0] else 1
 
         # Record the transition
         states.append(observation)
@@ -82,6 +85,7 @@ def run_episode(env, policy_grad, value_grad, sess, render=False):
         transitions.append((old_observation, action, reward))
         totalreward += reward
 
+        # Done?
         if done:
             break
 
@@ -94,7 +98,7 @@ def run_episode(env, policy_grad, value_grad, sess, render=False):
         decrease = 1
         for index2 in range(future_transitions):
             future_reward += transitions[(index2) + index][2] * decrease
-            decrease = decrease * 0.97
+            decrease = decrease * 0.95
         obs_vector = np.expand_dims(obs, axis=0)
         currentval = sess.run(vl_calculated, feed_dict={vl_state: obs_vector})[0][0]
 
@@ -108,9 +112,11 @@ def run_episode(env, policy_grad, value_grad, sess, render=False):
     update_vals_vector = np.expand_dims(update_vals, axis=1)
     sess.run(vl_optimizer, feed_dict={vl_state: states, vl_newvals: update_vals_vector})
 
+    # Update policy function
     advantages_vector = np.expand_dims(advantages, axis=1)
     sess.run(pl_optimizer, feed_dict={pl_state: states, pl_advantages: advantages_vector, pl_actions: actions})
 
+    # Done
     return totalreward
 
 # Go
@@ -122,27 +128,39 @@ sess = tf.InteractiveSession()
 sess.run(tf.global_variables_initializer())
 
 # Learn
-for i in range(2000):
+results = []
+for i in range(500):
     reward = run_episode(env, policy_grad, value_grad, sess)
-    if reward == 200:
-        print("Reward 200 at {}".format(i))
-        break
+    results.append(reward)
+    if reward < 200:
+        print("Fail at {}".format(i))
+        #break
 
 # Run 1000
-print("Running 1000")
+print("Running 100")
 t = 0
-for _ in range(1000):
+for _ in range(100):
     reward = run_episode(env, policy_grad, value_grad, sess)
     t += reward
-print("Got {}".format(t / 1000))
+    results.append(reward)
+print("Got {}".format(t / 100))
 
 # Submit
-if submit:
+if submit and t/100 > 195:
     # Submit to OpenAI Gym
     print("Submitting to gym...")
     gym.scoreboard.api_key = api_key
+    env.close()
     gym.upload('cartpole')
+else:
+    # Plot
+    #plt.plot(results)
+    #plt.xlabel('Episode')
+    #plt.ylabel('Rewards')
+    #plt.title('Rewards over time')
+    #plt.show()
 
-# Show one
-print("Showing one")
-reward = run_episode(env, policy_grad, value_grad, sess, True)
+    # Show ten
+    print("Showing 10")
+    for _ in range(100):
+        reward = run_episode(env, policy_grad, value_grad, sess, True)
