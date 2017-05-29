@@ -1,5 +1,5 @@
-
-# OpenAI Cartpole implementation.
+# OpenAI Gym Cartpole implementation.
+# Using a Policy Gradient and a 2-node 2-layer network.
 # By Tom Jacobs
 # 
 # Runs on Python 3.
@@ -34,14 +34,14 @@ def policy_gradient():
         good_probabilities = tf.reduce_sum(tf.multiply(probabilities, actions), reduction_indices=[1])
         eligibility = tf.log(good_probabilities) * advantages
         loss = -tf.reduce_sum(eligibility)
-        optimizer = tf.train.AdamOptimizer(0.1).minimize(loss) # Learning rate 0.01, aim to minimize loss
+        optimizer = tf.train.AdamOptimizer(0.1).minimize(loss) # Learning rate 0.1, aim to minimize loss
         return probabilities, state, actions, advantages, optimizer
 
 def value_gradient():
     with tf.variable_scope("value"):
         state = tf.placeholder("float", [None, 4])       # World state
         newvals = tf.placeholder("float", [None, 1])     
-        w1 = tf.get_variable("w1", [4, 2])              # Value gradient is *w1+b1, Relu, *w2+b2. 4, 10, 1.
+        w1 = tf.get_variable("w1", [4, 2])              # Value gradient is *w1+b1, Relu, *w2+b2. 4, 2, 1.
         b1 = tf.get_variable("b1", [2])
         h1 = tf.nn.relu(tf.matmul(state, w1) + b1)
         w2 = tf.get_variable("w2", [2, 1])
@@ -98,7 +98,7 @@ def run_episode(env, policy_grad, value_grad, sess, render=False):
         decrease = 1
         for index2 in range(future_transitions):
             future_reward += transitions[(index2) + index][2] * decrease
-            decrease = decrease * 0.95
+            decrease = decrease * 0.99
         obs_vector = np.expand_dims(obs, axis=0)
         currentval = sess.run(vl_calculated, feed_dict={vl_state: obs_vector})[0][0]
 
@@ -129,15 +129,14 @@ sess.run(tf.global_variables_initializer())
 
 # Learn
 results = []
-for i in range(500):
+for i in range(200):
     reward = run_episode(env, policy_grad, value_grad, sess)
     results.append(reward)
     if reward < 200:
         print("Fail at {}".format(i))
-        #break
 
-# Run 1000
-print("Running 100")
+# Run 100
+print("Running 100 more.")
 t = 0
 for _ in range(100):
     reward = run_episode(env, policy_grad, value_grad, sess)
@@ -160,7 +159,7 @@ else:
     #plt.title('Rewards over time')
     #plt.show()
 
-    # Show ten
-    print("Showing 10")
-    for _ in range(100):
+    # Show what it got to
+    print("Showing 3")
+    for _ in range(3):
         reward = run_episode(env, policy_grad, value_grad, sess, True)
