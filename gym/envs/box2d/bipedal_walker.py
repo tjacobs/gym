@@ -47,14 +47,14 @@ LIDAR_RANGE   = 160/SCALE
 INITIAL_RANDOM = 5
 
 HULL_POLY =[
-    (-30,+9), (+6,+9), (+34,+1),
-    (+34,-8), (-30,-8)
+    (-10, 20), (+5, 30), (+10,0),
+    (+10, -10), (-10,-10)
     ]
 LEG_DOWN = -8/SCALE
 LEG_W, LEG_H = 8/SCALE, 34/SCALE
 
-VIEWPORT_W = 600
-VIEWPORT_H = 400
+VIEWPORT_W = 1200
+VIEWPORT_H = 700
 
 TERRAIN_STEP   = 14/SCALE
 TERRAIN_LENGTH = 200     # in steps
@@ -68,7 +68,7 @@ class ContactDetector(contactListener):
         contactListener.__init__(self)
         self.env = env
     def BeginContact(self, contact):
-        if self.env.hull==contact.fixtureA.body or self.env.hull==contact.fixtureB.body:
+        if self.env.hull in [contact.fixtureA.body, contact.fixtureB.body]:
             self.env.game_over = True
         for leg in [self.env.legs[1], self.env.legs[3]]:
             if leg in [contact.fixtureA.body, contact.fixtureB.body]:
@@ -245,9 +245,9 @@ class BipedalWalker(gym.Env):
     def _generate_clouds(self):
         # Sorry for the clouds, couldn't resist
         self.cloud_poly   = []
-        for i in range(TERRAIN_LENGTH//20):
+        for i in range(TERRAIN_LENGTH//10):
             x = self.np_random.uniform(0, TERRAIN_LENGTH)*TERRAIN_STEP
-            y = VIEWPORT_H/SCALE*3/4
+            y = VIEWPORT_H/SCALE*0.9
             poly = [
                 (x+15*TERRAIN_STEP*math.sin(3.14*2*a/5)+self.np_random.uniform(0,5*TERRAIN_STEP),
                  y+ 5*TERRAIN_STEP*math.cos(3.14*2*a/5)+self.np_random.uniform(0,5*TERRAIN_STEP) )
@@ -359,7 +359,7 @@ class BipedalWalker(gym.Env):
         return self._step(np.array([0,0,0,0]))[0]
 
     def _step(self, action):
-        #self.hull.ApplyForceToCenter((0, 20), True) -- Uncomment this to receive a bit of stability help
+        self.hull.ApplyForceToCenter((0, 20), True) #-- Uncomment this to receive a bit of stability help
         control_speed = False  # Should be easier as well
         if control_speed:
             self.joints[0].motorSpeed = float(SPEED_HIP  * np.clip(action[0], -1, 1))
@@ -457,11 +457,11 @@ class BipedalWalker(gym.Env):
             if poly[0][0] > self.scroll + VIEWPORT_W/SCALE: continue
             self.viewer.draw_polygon(poly, color=color)
 
-        self.lidar_render = (self.lidar_render+1) % 100
-        i = self.lidar_render
-        if i < 2*len(self.lidar):
-            l = self.lidar[i] if i < len(self.lidar) else self.lidar[len(self.lidar)-i-1]
-            self.viewer.draw_polyline( [l.p1, l.p2], color=(1,0,0), linewidth=1 )
+#        self.lidar_render = (self.lidar_render+1) % 100
+#        i = self.lidar_render
+#        if i < 2*len(self.lidar):
+#            l = self.lidar[i] if i < len(self.lidar) else self.lidar[len(self.lidar)-i-1]
+#            self.viewer.draw_polyline( [l.p1, l.p2], color=(1,0,0), linewidth=1 )
 
         for obj in self.drawlist:
             for f in obj.fixtures:
@@ -490,19 +490,26 @@ class BipedalWalkerHardcore(BipedalWalker):
     hardcore = True
 
 if __name__=="__main__":
-    # Heurisic: suboptimal, have no notion of balance.
+
+    SUPPORT_KNEE_ANGLE = +0.1
+    SPEED = 0.28
+
     env = BipedalWalker()
     env.reset()
     steps = 0
     total_reward = 0
+
+    # Action to take
     a = np.array([0.0, 0.0, 0.0, 0.0])
-    STAY_ON_ONE_LEG, PUT_OTHER_DOWN, PUSH_OFF = 1,2,3
-    SPEED = 0.29  # Will fall forward on higher speed
+
+    # States
+    STAY_ON_ONE_LEG, PUT_OTHER_DOWN, PUSH_OFF = 1, 2, 3
     state = STAY_ON_ONE_LEG
     moving_leg = 0
     supporting_leg = 1 - moving_leg
-    SUPPORT_KNEE_ANGLE = +0.1
     supporting_knee_angle = SUPPORT_KNEE_ANGLE
+
+    # Loop
     while True:
         s, r, done, info = env.step(a)
         total_reward += r
@@ -514,16 +521,19 @@ if __name__=="__main__":
             print("leg1 " + str(["{:+0.2f}".format(x) for x in s[9:14]]))
         steps += 1
 
+        # Foot touched the ground?
         contact0 = s[8]
         contact1 = s[13]
         moving_s_base = 4 + 5*moving_leg
         supporting_s_base = 4 + 5*supporting_leg
 
-        hip_targ  = [None,None]   # -0.8 .. +1.1
-        knee_targ = [None,None]   # -0.6 .. +0.9
+        # Targets
+        hip_targ  = [None, None]   # -0.8 .. +1.1
+        knee_targ = [None, None]   # -0.6 .. +0.9
         hip_todo  = [0.0, 0.0]
         knee_todo = [0.0, 0.0]
 
+        # State to target mapping
         if state==STAY_ON_ONE_LEG:
             hip_targ[moving_leg]  = 1.1
             knee_targ[moving_leg] = -0.6
@@ -553,7 +563,7 @@ if __name__=="__main__":
         if knee_targ[0]: knee_todo[0] = 4.0*(knee_targ[0] - s[6])  - 0.25*s[7]
         if knee_targ[1]: knee_todo[1] = 4.0*(knee_targ[1] - s[11]) - 0.25*s[12]
 
-        hip_todo[0] -= 0.9*(0-s[0]) - 1.5*s[1] # PID to keep head strait
+        hip_todo[0] -= 0.9*(0-s[0]) - 1.5*s[1] # PID to keep head straight
         hip_todo[1] -= 0.9*(0-s[0]) - 1.5*s[1]
         knee_todo[0] -= 15.0*s[3]  # vertical speed, to damp oscillations
         knee_todo[1] -= 15.0*s[3]
